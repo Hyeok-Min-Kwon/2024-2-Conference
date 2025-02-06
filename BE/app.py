@@ -1,12 +1,12 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
-import openai
+import google.generativeai as genai
 import os
 
 # 환경 변수 로드
 load_dotenv()
-openai.api_key = os.environ.get("OPENAI_API_KEY")
+genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 # Flask 앱 설정
 app = Flask(__name__)
@@ -18,16 +18,14 @@ def ask():
     question = data.get('question')  # 질문 추출
 
     try:
-        response = openai.Client().chat.completions.create(
-            model="gpt-3.5-turbo",  # 사용할 모델
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": question}
-            ]
-        )
+        # Gemini 모델 설정
+        model = genai.GenerativeModel('gemini-pro')
+        
+        # 응답 생성
+        response = model.generate_content(question)
 
         # 응답 데이터에서 답변 추출
-        answer = response.choices[0].message.content.strip()
+        answer = response.text
 
     except Exception as e:
         # 모든 예외 처리
