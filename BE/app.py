@@ -10,7 +10,7 @@ genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 # Flask 앱 설정
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 @app.route('/api/ask', methods=['POST'])
 def ask():
@@ -35,4 +35,4 @@ def ask():
     return jsonify({"answer": answer})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)
