@@ -11,7 +11,7 @@ import re
 
 # MongoDB 연결
 load_dotenv() # .env 파일 로드
-connection_string = os.getenv("MONGO_URI")
+connection_string = os.environ.get("MONGO_URI")
 
 client = MongoClient(connection_string, tls=True, tlsAllowInvalidCertificates=True)
 db = client['Conference'] # DB 선택
@@ -25,7 +25,7 @@ sections = {100: '정치',
             104: '세계', 
             }
 
-news_cnt = 3 # section별로 크롤링 해올 기사 개수 지정
+news_cnt = 5 # section별로 크롤링 해올 기사 개수 지정
 re_blank = True # 공백 제거 여부 설정 # 제거: True 
 
 news_li = []
