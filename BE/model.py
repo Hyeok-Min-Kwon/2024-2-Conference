@@ -1,30 +1,38 @@
-import json
 import os
 import re
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import google.generativeai as genai
 from google.api_core import retry
+from pymongo import MongoClient
 
 # 환경 변수 로드
 load_dotenv()
-genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
+gemini_api = os.environ.get("Gemini_API_KEY")
+genai.configure(api_key= gemini_api)
+
+# MongoDB 연결 설정
+connection_string = os.environ.get("DB_connection_string")
+client = MongoClient(connection_string)
+db = client['Conference']
+article_collection = db["article"]
 
 # Gemini 모델 설정
-gemini_model = genai.GenerativeModel("gemini-pro")
+model = genai.GenerativeModel("gemini-pro")
 
-# 뉴스 데이터 JSON 파일 경로
-NEWS_JSON_FILE = "news_data.json"
+# 사용자의 뉴스 히스토리 저장 (세션 유지)
+user_news = ""  # 전역 변수
 
-# 사용자별 세션 유지
-user_history = {}
-
-# json 데이터 로드드
+# MongoDB에서 뉴스 데이터 로드 (JSON 파일 대신)
 def load_data():
-    with open(NEWS_JSON_FILE, "r", encoding="utf-8") as file:
-        return json.load(file)
+    articles = list(article_collection.find({}))
+    # ObjectId 등 JSON 직렬화에 문제가 되는 항목은 문자열로 변환합니다.
+    for article in articles:
+        if "_id" in article:
+            article["_id"] = str(article["_id"])
+    return articles
 
-# 질문에서 날짜와 분야야 추출
+# 질문에서 날짜와 분야(섹션) 추출
 def extract_date_section(question):
     keywords = {
         "경제": "경제", 
@@ -42,19 +50,20 @@ def extract_date_section(question):
     }
     section, date = None, None
 
-    # date 기본값을 오늘로 설정
+    # 기본 날짜: 오늘
     date = datetime.today().strftime("%Y-%m-%d")
 
-    # date 파싱 (질문에서 날짜가 주어진 경우)
+    # 질문에 "어제"가 포함된 경우 어제 날짜로 설정
     if "어제" in question:
         date = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
     else:
+        # "2월 7일" 또는 "2/7" 형식의 날짜 추출
         match = re.search(r"(\d{1,2})월\s*(\d{1,2})일", question) or re.search(r"(\d{1,2})/(\d{1,2})", question)
         if match:
             month, day = match.groups()
             date = datetime(datetime.today().year, int(month), int(day)).strftime("%Y-%m-%d")
 
-    # 뉴스 분야 추출
+    # 뉴스 분야(섹션) 추출
     question_lower = question.lower()
     for key, cat in keywords.items():
         if key.lower() in question_lower:
@@ -63,7 +72,7 @@ def extract_date_section(question):
 
     return date, section
 
-# 질문 판별
+# Gemini 모델을 사용하여 질문 유형을 분류
 def classify_question(question):
     prompt = f"""
     사용자의 질문을 보고 아래 중 하나로 분류하세요.
@@ -76,13 +85,15 @@ def classify_question(question):
     질문 유형:
     """
     try:
-        response = gemini_model.generate_content(prompt, request_options={'retry':retry.Retry()})
+        response = model.generate_content(prompt, request_options={'retry': retry.Retry()})
         return response.text.strip()
     except Exception as e:
         return f" Gemini error: {str(e)}"
 
-# 판별된 유형에 따라 적절한 응답 제공공
-def summarize(user_id, question):
+# 판별된 유형에 따라 적절한 응답 제공
+def summarize(question):
+    global user_news
+
     question_type = classify_question(question)
 
     if "뉴스 요청" in question_type:
@@ -92,13 +103,13 @@ def summarize(user_id, question):
             return "분야를 인식할 수 없습니다. '경제 뉴스 알려줘', '정치 뉴스 궁금해'처럼 입력해주세요."
 
         news_articles = load_data()
-        filtered_news = [article for article in news_articles if article["date"] == date and article["section"] == section]
+        filtered_news = [article for article in news_articles if article.get("date") == date and article.get("section") == section]
 
         if not filtered_news:
             return f"❌ {date}의 {section} 뉴스가 없습니다. ❌"
 
-        # 검색된 뉴스를를 캐시에 저장 (세션 유지)
-        user_history[user_id] = "\n\n".join([f"제목: {article['title']}\n내용: {article['content']}" for article in filtered_news])
+        # 필터링된 뉴스를 하나의 문자열로 결합하여 세션에 저장
+        user_news = "\n\n".join([f"제목: {article.get('title', '제목없음')}\n내용: {article.get('content', '내용없음')}" for article in filtered_news])
 
         prompt = f"""
         다음은 {date}의 {section} 뉴스 기사입니다. 이를 바탕으로 뉴스 요약을 제공하세요.
@@ -106,46 +117,33 @@ def summarize(user_id, question):
         2. 중요한 뉴스라고 생각된다면, 따로 요약해서 알려주세요.
         3. 전문 용어 등의 어려운 개념은 설명을 추가해주세요.
 
-        {user_history[user_id]}
+        {user_news}
 
         뉴스 분석:
         """
 
     elif "일반 개념 질문" in question_type:
-        related_news = user_history.get(user_id, "")
         prompt = f"""
         사용자의 질문: {question}
 
-        만약 관련 뉴스가 있다면 참고하세요:
-        {related_news}
+        너가 위에서 분석한 설명이나 뉴스에서 어떤 의미로 쓰였는지 같이 설명해주세요.
 
-        관련 뉴스 내용이 없으면, 일반적인 지식을 바탕으로 답변하세요.
+        뉴스나 설명에 없는 용어라면, 일반적인 지식을 바탕으로 답변하세요.
+
+        관련 뉴스: {user_news}
         """
-
     else: 
         prompt = f"""
         {question}
         """
 
     try:
-        response = gemini_model.generate_content(prompt, request_options={'retry':retry.Retry()})
+        response = model.generate_content(prompt, request_options={'retry': retry.Retry()})
         return response.text
     except Exception as e:
         return f" Gemini error: {str(e)}"
 
 
-if __name__ == "__main__":
-    user_id = "user_123"  # 세션을 유지할 사용자 ID
-
-    print("\n🔵 뉴스 분석 및 경제 질문 AI 🔵")
-    print("질문을 입력하세요. (종료하려면 'exit' 입력)")
-
-    while True:
-        user_question = input("\n📢 질문: ")
-
-        if user_question.lower() == "exit":
-            print("🔴 프로그램 종료.")
-            break
-
-        response = summarize(user_id, user_question)
-        print(f"\n📝 응답: {response}")
+question = "최근 IT 뉴스 요약해줘"
+answer = summarize(question)
+print(answer)
