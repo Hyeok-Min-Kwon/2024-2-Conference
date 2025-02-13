@@ -14,7 +14,7 @@ genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 # Flask 앱 설정
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={r"/api/*": {"origins": "https://fom2024conference.vercel.app"}}, supports_credentials=True)
 
 # MongoDB 연결 설정
 connection_string = os.environ.get("MONGO_URI")
@@ -151,4 +151,4 @@ def ask():
     return jsonify({"answer": answer})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=4000, debug=False)
