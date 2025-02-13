@@ -45,7 +45,7 @@ search_tool = Tool(
     description="MongoDB에서 뉴스 검색 (날짜와 카테고리를 입력하세요)."
 )
 
-# 모델 사용해서 date, section 추출 
+# 모델 사용해서 date, section 추출
 def generate_date_section(user_query):
     prompt = f"""
     사용자의 질문을 분석하여, date와 section를 응답 형식에 맞추어서 알려줘.
@@ -95,7 +95,7 @@ def article(answer):
     news_articles = search_news(query)
 
     if not news_articles or news_articles == "해당 날짜의 뉴스가 없습니다.":
-        return "해당 날짜와 카테고리에 맞는 뉴스가 없습니다."
+        return "해당 날짜와 카테고리에 맞는 뉴스가 없습니다.", None, None
 
     print("\n✅ MongoDB에서 가져온 뉴스 데이터:")
     for news in news_articles:
@@ -127,6 +127,11 @@ def summarize(news_texts, date, section):
     response = model.generate_content(prompt)
     return response.text
 
+# 뉴스 관련 질문인지 확인하는 함수
+def is_news_related(query):
+    news_keywords = ['뉴스', '경제', 'IT', '정치', '사회','생활', '문화', '세계', '과학']
+    return any(keyword in query for keyword in news_keywords)
+
 # Flask API 엔드포인트
 @app.route('/api/ask', methods=['POST'])
 def ask():
@@ -134,16 +139,21 @@ def ask():
     question = data.get('question')
 
     try:
-        # Step 1: 질문 분석하여 date, section 추출
-        date_section = generate_date_section(question)
+        if is_news_related(question):
+            # 뉴스 관련 질문 처리
+            date_section = generate_date_section(question)
+            news_texts, date, section = article(date_section)
 
-        # Step 2: MongoDB에서 관련 뉴스 데이터 가져오기
-        news_texts, date, section = article(date_section)
+            if news_texts is None:
+                return jsonify({"answer": "해당 날짜와 카테고리에 맞는 뉴스가 없습니다."})
 
-        # Step 3: 뉴스 요약
-        summary = summarize(news_texts, date, section)
-
-        answer = summary
+            summary = summarize(news_texts, date, section)
+            answer = summary
+        else:
+            # 뉴스 관련 질문이 아니면 일반적인 모델로 응답
+            prompt = f"다음 질문에 대해 응답해 주세요: {question}"
+            response = model.generate_content(prompt)
+            answer = response.text
 
     except Exception as e:
         answer = f"An error occurred: {str(e)}"
