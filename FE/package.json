@@ -1,6 +1,5 @@
 {
-  "homepage": "https://hyeok-min-kwon.github.io/",
-  "name": "llm-service",
+  "name": "my-app",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -11,14 +10,12 @@
     "react-scripts": "5.0.1",
     "web-vitals": "^4.2.4"
   },
+  "homepage": "https://Hyeok-Min-Kwon.github.io/",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "predeploy" : "npm run build",
-    "deploy": "gh-pages -d build --repo https://github.com/Hyeok-Min-Kwon/Hyeok-Min-Kwon.github.io.git"
-
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
