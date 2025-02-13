@@ -3,3 +3,4 @@ BE/.env
 venv
 flask-gemini-app.tar
 .DS_Store
+.env

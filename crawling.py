@@ -25,7 +25,7 @@ sections = {100: '정치',
             104: '세계', 
             }
 
-news_cnt = 5 # section별로 크롤링 해올 기사 개수 지정
+news_cnt = 2 # section별로 크롤링 해올 기사 개수 지정
 re_blank = True # 공백 제거 여부 설정 # 제거: True 
 
 news_li = []
